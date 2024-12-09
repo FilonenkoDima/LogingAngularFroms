@@ -2,25 +2,25 @@ import { Component, OnInit } from '@angular/core';
 import {
   AbstractControl,
   AsyncValidatorFn,
+  FormArray,
   FormControl,
   FormGroup,
   ReactiveFormsModule,
   ValidationErrors,
   Validators,
 } from '@angular/forms';
-import { map, Observable, of } from 'rxjs';
+import { of } from 'rxjs';
 
-function asyncIsEqual(value: string): AsyncValidatorFn {
-  return (control: AbstractControl): Observable<ValidationErrors | null> => {
-    return of(control.value).pipe(
-      map((val) => {
-        if (!val || val === value) {
-          return null;
-        } else {
-          return { isNotEqual: true };
-        }
-      })
-    );
+function isEqual(controlName1: string, controlName2: string) {
+  return (control: AbstractControl) => {
+    const val1 = control.get(controlName1)?.value;
+    const val2 = control.get(controlName2)?.value;
+
+    if (val1 === val2) {
+      return null;
+    }
+
+    return { valuesNotEqual: true };
   };
 }
 
@@ -36,21 +36,26 @@ const asyncRequiredValidator: AsyncValidatorFn = (control) => {
   templateUrl: './signup.component.html',
   styleUrl: './signup.component.css',
 })
-export class SignupComponent implements OnInit {
+export class SignupComponent {
   form = new FormGroup({
     email: new FormControl('', {
       validators: [Validators.required, Validators.email],
     }),
-    passwords: new FormGroup({
-      password: new FormControl('', {
-        validators: [Validators.minLength(8)],
-        asyncValidators: [asyncRequiredValidator],
-      }),
-      confirmPassword: new FormControl('', {
-        validators: [Validators.required, Validators.minLength(8)],
-        asyncValidators: [asyncRequiredValidator],
-      }),
-    }),
+    passwords: new FormGroup(
+      {
+        password: new FormControl('', {
+          validators: [Validators.minLength(8)],
+          asyncValidators: [asyncRequiredValidator],
+        }),
+        confirmPassword: new FormControl('', {
+          validators: [Validators.required, Validators.minLength(8)],
+          asyncValidators: [asyncRequiredValidator],
+        }),
+      },
+      {
+        validators: [isEqual('password', 'confirmPassword')],
+      }
+    ),
     firstName: new FormControl('', { validators: [Validators.required] }),
     lastName: new FormControl('', { validators: [Validators.required] }),
     address: new FormGroup({
@@ -62,22 +67,16 @@ export class SignupComponent implements OnInit {
     role: new FormControl<
       'student' | 'teacher' | 'employee' | 'founder' | 'other'
     >('student', { validators: [Validators.required] }),
+    source: new FormArray([
+      new FormControl(false),
+      new FormControl(false),
+      new FormControl(false),
+    ]),
     agree: new FormControl(false, { validators: [Validators.required] }),
   });
 
-  ngOnInit(): void {
-    const passwordControl = this.form.value.passwords?.password!;
-    const confirmPasswordControl =
-      this.form.controls.passwords?.controls.confirmPassword!;
-
-    confirmPasswordControl.statusChanges.subscribe((status) => {
-      if (status === 'VALID' && confirmPasswordControl.touched) {
-        confirmPasswordControl.setAsyncValidators(
-          asyncIsEqual(passwordControl)
-        );
-        confirmPasswordControl.updateValueAndValidity({ emitEvent: false });
-      }
-    });
+  get formIsInvalid() {
+    return this.form.touched && this.form.dirty && this.form.invalid;
   }
 
   get emailIsInvalid() {
@@ -101,8 +100,10 @@ export class SignupComponent implements OnInit {
   }
 
   onSubmit() {
+    if (this.form.invalid) {
+      console.log('INVALID FORM');
+      return;
+    }
     console.log(this.form);
-
-    this.onReset();
   }
 }
